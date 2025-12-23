@@ -10,7 +10,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@auth/mongodb-adapter": "^3.11.1",
+
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@googlemaps/markerclusterer": "^2.6.2",
@@ -23,8 +23,9 @@
     "cloudinary": "^2.8.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.562.0",
-    "mongodb": "^7.0.0",
-    "mongoose": "^9.0.2",
+     "mongodb": "^6.0.0",
+  "@auth/mongodb-adapter": "^3.11.1",
+  "mongoose": "^9.0.2",
     "next": "^15.0.4",
     "next-auth": "^5.0.0-beta.30",
     "nodemailer": "^7.0.11",
