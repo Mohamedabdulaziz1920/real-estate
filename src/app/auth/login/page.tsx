@@ -1,14 +1,15 @@
+// src/app/auth/login/page.tsx - النسخة المصححة
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import { FaEnvelope, FaLock, FaEye, FaEyeSlash, FaGoogle, FaSpinner } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
-export default function LoginPage() {
+// المكون الداخلي الذي يستخدم useSearchParams
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/';
@@ -60,6 +61,7 @@ export default function LoginPage() {
     }
   };
 
+  // ⭐ الكود المتبقي كما هو تماماً (من return إلى نهاية الملف)
   return (
     <main className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-50 flex items-center justify-center p-4" dir="rtl">
       <div className="w-full max-w-md">
@@ -198,5 +200,21 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+// المكون الرئيسي مع Suspense
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">جاري تحميل صفحة تسجيل الدخول...</p>
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }
