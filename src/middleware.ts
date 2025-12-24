@@ -24,7 +24,7 @@ export default auth((req) => {
     protectedPaths.some((path) => pathname.startsWith(path)) &&
     !isLoggedIn
   ) {
-    const loginUrl = new URL("/auth/login", req.url);
+    const loginUrl = new URL("/auth/sign-in", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
   }
