@@ -36,6 +36,6 @@ export const authConfig = {
       return isLoggedIn;
     },
   },
-  secret: process.env.AUTH_SECRET,
+  secret: process.env.NEXTAUTH_SECRET,
   trustHost: true,
 } satisfies NextAuthConfig;
