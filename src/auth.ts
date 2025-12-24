@@ -1,4 +1,4 @@
-// src/auth.ts - مُبسَّط ومنسجم مع Auth.js v5
+// src/auth.ts
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
@@ -9,50 +9,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null;
-        }
+        const dbConnect = (await import("@/lib/mongodb")).default;
+        const User = (await import("@/models/User")).default;
 
-        try {
-          // استيراد الديناميكي لمنع مشاكل التبعيات
-          const dbConnect = (await import("@/lib/mongodb")).default;
-          const User = (await import("@/models/User")).default;
+        await dbConnect();
+        const user = await User.findOne({ email: credentials?.email }).select("+password");
+        if (!user) return null;
 
-          await dbConnect();
+        const valid = await bcrypt.compare(credentials!.password as string, user.password);
+        if (!valid) return null;
 
-          const user = await User.findOne({
-            email: credentials.email.toString().toLowerCase(),
-          }).select("+password");
-
-          if (!user || !user.password) {
-            return null;
-          }
-
-          const isValid = await bcrypt.compare(
-            credentials.password.toString(),
-            user.password
-          );
-
-          if (!isValid) {
-            return null;
-          }
-
-          return {
-            id: user._id.toString(),
-            name: user.name,
-            email: user.email,
-            image: user.image,
-            role: user.role || "user",
-          };
-        } catch (error) {
-          console.error("Auth error:", error);
-          return null;
-        }
+        return {
+          id: user._id.toString(),
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        };
       },
     }),
     Google({
