@@ -1,41 +1,60 @@
-// src/auth.config.ts
 import type { NextAuthConfig } from "next-auth";
 
-export const authConfig = {
-   pages: {
-    signIn: '/auth/sign-in', 
-    signOut: '/',
-    error: '/auth/error',
+export const authConfig: NextAuthConfig = {
+  pages: {
+    signIn: "/auth/login",
+    error: "/auth/error",
   },
 
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60,
   },
-  providers: [], 
+
   callbacks: {
-    async jwt({ token, user }) {
+    authorized({ auth, request: { nextUrl } }) {
+      const isLoggedIn = !!auth?.user;
+
+      const protectedPaths = [
+        "/add-property",
+        "/profile",
+        "/settings",
+        "/my-properties",
+        "/favorites",
+        "/messages",
+        "/admin",
+        "/dashboard",
+      ];
+
+      const isProtectedRoute = protectedPaths.some((path) =>
+        nextUrl.pathname.startsWith(path)
+      );
+
+      if (isProtectedRoute) {
+        if (isLoggedIn) return true;
+        return false;
+      }
+
+      return true;
+    },
+
+    jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role || "user";
       }
       return token;
     },
-    async session({ session, token }) {
+
+    session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        
-        // --- التعديل هنا ---
-        // نقوم بإجبار النوع ليكون مطابقاً للأنواع المسموحة
-        session.user.role = (token.role as "user" | "agent" | "admin") || "user"; 
+        session.user.role = token.role as string;
       }
       return session;
     },
-    authorized({ auth }) {
-      const isLoggedIn = !!auth?.user;
-      return isLoggedIn;
-    },
   },
-  secret: process.env.AUTH_SECRET,
+
+  providers: [],
   trustHost: true,
-} satisfies NextAuthConfig;
+};

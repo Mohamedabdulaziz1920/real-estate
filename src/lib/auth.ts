@@ -1,21 +1,12 @@
-// إصدار مبسط بدون أنواع معقدة
+// src/lib/auth.ts
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import dbConnect from './mongodb';
 import User from '../models/User';
 import bcrypt from 'bcryptjs';
+import type { NextAuthOptions } from 'next-auth';
 
-// تعريف نوع مبسط
-type AuthOptions = {
-  providers: any[];
-  session: any;
-  secret?: string;
-  pages?: any;
-  callbacks?: any;
-  debug?: boolean;
-};
-
-const authOptions: AuthOptions = {
+const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: 'credentials',
@@ -23,7 +14,7 @@ const authOptions: AuthOptions = {
         email: { label: 'البريد الإلكتروني', type: 'email' },
         password: { label: 'كلمة المرور', type: 'password' },
       },
-      async authorize(credentials: any): Promise<any> {
+      async authorize(credentials) {
         await dbConnect();
         
         if (!credentials?.email || !credentials?.password) {
@@ -38,16 +29,13 @@ const authOptions: AuthOptions = {
           throw new Error('البريد الإلكتروني أو كلمة المرور غير صحيحة');
         }
 
-        // تأكد من وجود كلمة مرور
         if (!user.password) {
           throw new Error('الحساب لا يحتوي على كلمة مرور');
         }
 
-        // تحقق من كلمة المرور
-        const passwordHash = String(user.password);
         const isPasswordCorrect = await bcrypt.compare(
           credentials.password,
-          passwordHash
+          user.password
         );
 
         if (!isPasswordCorrect) {
@@ -64,27 +52,33 @@ const authOptions: AuthOptions = {
       },
     }),
 
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    }),
+    // Google Provider فقط إذا كانت المفاتيح موجودة
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [
+          GoogleProvider({
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          }),
+        ]
+      : []),
   ],
 
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 يوم
   },
 
-  secret: process.env.NEXTAUTH_SECRET || 'default-secret-key',
+  // استخدم NEXTAUTH_SECRET بدون قيمة افتراضية
+  secret: process.env.NEXTAUTH_SECRET,
 
   pages: {
-    signIn: '/auth/sign-in', 
+    signIn: '/auth/login', 
     signOut: '/',
     error: '/auth/error',
   },
 
   callbacks: {
-    async jwt({ token, user, account, profile }: any) {
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.email = user.email;
@@ -96,13 +90,13 @@ const authOptions: AuthOptions = {
       return token;
     },
 
-    async session({ session, token }: any) {
+    async session({ session, token }) {
       if (session.user && token) {
-        session.user.id = token.id;
-        session.user.email = token.email;
-        session.user.name = token.name;
-        session.user.image = token.image;
-        session.user.role = token.role;
+        session.user.id = token.id as string;
+        session.user.email = token.email as string;
+        session.user.name = token.name as string;
+        session.user.image = token.image as string;
+        session.user.role = token.role as string;
       }
       return session;
     },

@@ -1,4 +1,4 @@
-// src/auth.ts - مُبسَّط ومنسجم مع Auth.js v5
+// src/auth.ts
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
@@ -7,6 +7,7 @@ import { authConfig } from "./auth.config";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  secret: process.env.AUTH_SECRET!, // ← أضفه هنا مع !
   providers: [
     Credentials({
       credentials: {
@@ -15,11 +16,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          return null;
+          throw new Error("البريد الإلكتروني وكلمة المرور مطلوبان");
         }
 
         try {
-          // استيراد الديناميكي لمنع مشاكل التبعيات
           const dbConnect = (await import("@/lib/mongodb")).default;
           const User = (await import("@/models/User")).default;
 
@@ -29,8 +29,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: credentials.email.toString().toLowerCase(),
           }).select("+password");
 
-          if (!user || !user.password) {
-            return null;
+          if (!user) {
+            throw new Error("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+          }
+
+          if (!user.password) {
+            throw new Error("هذا الحساب مسجل بواسطة Google");
           }
 
           const isValid = await bcrypt.compare(
@@ -39,7 +43,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           );
 
           if (!isValid) {
-            return null;
+            throw new Error("البريد الإلكتروني أو كلمة المرور غير صحيحة");
           }
 
           return {
@@ -49,9 +53,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             image: user.image,
             role: user.role || "user",
           };
-        } catch (error) {
+        } catch (error: any) {
           console.error("Auth error:", error);
-          return null;
+          throw new Error(error.message || "حدث خطأ في تسجيل الدخول");
         }
       },
     }),
