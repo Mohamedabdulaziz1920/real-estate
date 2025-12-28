@@ -1,57 +1,86 @@
 // src/middleware.ts
-import { auth } from "@/auth";
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { getToken } from 'next-auth/jwt';
 
-export default auth((req) => {
-  const { nextUrl } = req;
-  const isLoggedIn = !!req.auth;
+// الحصول على الـ secret
+const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
 
-  // السماح بالوصول لصفحات المصادقة
-  if (nextUrl.pathname.startsWith("/auth/")) {
-    // إذا مسجل دخول، وجهه للرئيسية
-    if (isLoggedIn) {
-      return NextResponse.redirect(new URL("/", nextUrl));
-    }
+export default async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  
+  // السماح بالوصول لصفحات المصادقة والملفات الثابتة
+  if (
+    pathname.startsWith('/auth/') || 
+    pathname.startsWith('/api/auth/') ||
+    pathname.startsWith('/_next/') ||
+    pathname.startsWith('/images/') ||
+    pathname.includes('.')
+  ) {
     return NextResponse.next();
   }
-
+  
   // المسارات المحمية
   const protectedPaths = [
-    "/add-property",
-    "/profile",
-    "/settings",
-    "/my-properties",
-    "/favorites",
-    "/messages",
-    "/dashboard",
+    '/add-property',
+    '/profile', 
+    '/settings',
+    '/my-properties',
+    '/favorites',
+    '/messages',
+    '/admin',
+    '/dashboard',
+    '/edit-property',
   ];
-
-  const isProtectedRoute = protectedPaths.some((path) =>
-    nextUrl.pathname.startsWith(path)
+  
+  const isProtectedRoute = protectedPaths.some(path => 
+    pathname.startsWith(path)
   );
-
-  // مسارات الأدمن
-  const isAdminRoute = nextUrl.pathname.startsWith("/admin");
-
-  if (isProtectedRoute || isAdminRoute) {
-    if (!isLoggedIn) {
-      const callbackUrl = encodeURIComponent(nextUrl.pathname);
-      return NextResponse.redirect(
-        new URL(`/auth/login?callbackUrl=${callbackUrl}`, nextUrl)
-      );
+  
+  if (isProtectedRoute) {
+    // التحقق من وجود الـ secret
+    if (!secret) {
+      console.error('NEXTAUTH_SECRET is not defined');
+      // في حالة عدم وجود secret، نسمح بالمرور ونترك الصفحة تتعامل مع المصادقة
+      return NextResponse.next();
     }
 
-    // تحقق من صلاحيات الأدمن
-    if (isAdminRoute && req.auth?.user?.role !== "admin") {
-      return NextResponse.redirect(new URL("/", nextUrl));
+    try {
+      // استخدم getToken للتحقق من الجلسة
+      const token = await getToken({
+        req: request,
+        secret: secret,
+      });
+      
+      if (!token) {
+        const loginUrl = new URL('/auth/login', request.url);
+        loginUrl.searchParams.set('callbackUrl', pathname);
+        return NextResponse.redirect(loginUrl);
+      }
+      
+      // التحقق من صلاحيات الأدمن
+      if (pathname.startsWith('/admin') && token.role !== 'admin') {
+        return NextResponse.redirect(new URL('/', request.url));
+      }
+    } catch (error) {
+      console.error('Middleware error:', error);
+      return NextResponse.next();
     }
   }
-
+  
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|images|public).*)",
+    '/add-property/:path*',
+    '/profile/:path*',
+    '/settings/:path*',
+    '/my-properties/:path*',
+    '/favorites/:path*',
+    '/messages/:path*',
+    '/admin/:path*',
+    '/dashboard/:path*',
+    '/edit-property/:path*',
   ],
 };

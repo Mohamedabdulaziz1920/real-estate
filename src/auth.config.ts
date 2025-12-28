@@ -40,7 +40,8 @@ export const authConfig: NextAuthConfig = {
 
     jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
+        // تم التعديل هنا: استخدام (??) للتعامل مع احتمال أن يكون الـ id غير موجود
+        token.id = user.id ?? "";
         token.role = (user as any).role || "user";
       }
       return token;
@@ -54,7 +55,10 @@ export const authConfig: NextAuthConfig = {
       return session;
     },
   },
-
-  providers: [],
+  secret: process.env.AUTH_SECRET,
   trustHost: true,
-};
+  
+  // تم التعديل هنا: إضافة مصفوفة المزودين (مطلوبة حتى لو كانت فارغة في ملف الـ config)
+  providers: [], 
+
+} satisfies NextAuthConfig;

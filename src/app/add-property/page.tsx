@@ -69,7 +69,7 @@ const cities = [
   'القطيف', 'الجبيل', 'حائل', 'نجران', 'جازان',
 ];
 
-const features = [
+const featuresList = [
   { key: 'parking', label: 'موقف سيارات', icon: FaParking },
   { key: 'pool', label: 'مسبح', icon: FaSwimmingPool },
   { key: 'garden', label: 'حديقة', icon: FaTree },
@@ -144,6 +144,25 @@ const initialFormData: FormData = {
   images: [],
 };
 
+// ✅ دالة تحويل الأرقام العربية إلى إنجليزية (خارج المكون - OK)
+const arabicToEnglishNumbers = (str: string): string => {
+  const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  let result = str;
+  arabicNumerals.forEach((arabic, index) => {
+    result = result.replace(new RegExp(arabic, 'g'), index.toString());
+  });
+  return result;
+};
+
+// ✅ دالة تنسيق السعر (خارج المكون - OK)
+const formatPrice = (price: string): string => {
+  const cleanPrice = price.replace(/[^\d]/g, '');
+  if (!cleanPrice) return '';
+  const num = parseInt(cleanPrice, 10);
+  if (isNaN(num)) return '';
+  return num.toLocaleString('en-US');
+};
+
 export default function AddPropertyPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -167,6 +186,7 @@ export default function AddPropertyPage() {
     return null;
   }
 
+  // ✅ دوال التحديث (داخل المكون)
   const updateFormData = (updates: Partial<FormData>) => {
     setFormData((prev) => ({ ...prev, ...updates }));
   };
@@ -183,6 +203,25 @@ export default function AddPropertyPage() {
       ...prev,
       features: { ...prev.features, ...updates },
     }));
+  };
+
+  // ✅ دالة معالجة تغيير السعر (داخل المكون)
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value;
+    value = arabicToEnglishNumbers(value);
+    value = value.replace(/[^\d]/g, '');
+    updateFormData({ price: value });
+  };
+
+  // ✅ دالة معالجة تغيير الأرقام (داخل المكون)
+  const handleNumberChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: keyof FormData['features']
+  ) => {
+    let value = e.target.value;
+    value = arabicToEnglishNumbers(value);
+    value = value.replace(/[^\d]/g, '');
+    updateFeatures({ [field]: value });
   };
 
   const validateStep = (step: number): boolean => {
@@ -248,101 +287,89 @@ export default function AddPropertyPage() {
     }
   };
 
-const handleSubmit = async (isDraft: boolean = false) => {
-  // التحقق من الخطوات
-  if (!isDraft && !validateStep(4)) return;
-
-  if (isDraft) {
-    setSavingDraft(true);
-  } else {
-    setLoading(true);
-  }
-
-  try {
-    const propertyData = {
-      propertyType: formData.propertyType,
-      listingType: formData.listingType,
-      title: formData.titleAr,
-      titleAr: formData.titleAr,
-      description: formData.descriptionAr,
-      descriptionAr: formData.descriptionAr,
-      price: parseInt(formData.price) || 0,
-      location: {
-        city: formData.location.city,
-        district: formData.location.district,
-        address: formData.location.address || '',
-        coordinates: formData.location.coordinates,
-      },
-      features: {
-        area: parseInt(formData.features.area) || 0,
-        bedrooms: formData.features.bedrooms ? parseInt(formData.features.bedrooms) : undefined,
-        bathrooms: formData.features.bathrooms ? parseInt(formData.features.bathrooms) : undefined,
-        floors: formData.features.floors ? parseInt(formData.features.floors) : undefined,
-        yearBuilt: formData.features.yearBuilt ? parseInt(formData.features.yearBuilt) : undefined,
-        parking: formData.features.parking,
-        pool: formData.features.pool,
-        garden: formData.features.garden,
-        airConditioning: formData.features.airConditioning,
-        security: formData.features.security,
-        elevator: formData.features.elevator,
-        furnished: formData.features.furnished,
-      },
-      images: formData.images,
-      status: isDraft ? 'draft' : 'available',
-    };
-
-    console.log('Sending property data:', propertyData);
-
-    const response = await fetch('/api/properties', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(propertyData),
-    });
-
-    // ✅ التحقق من الاستجابة
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `خطأ في الخادم: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log('Response:', data);
-
-    if (data.success) {
-      toast.success(isDraft ? 'تم حفظ المسودة' : 'تم نشر العقار بنجاح!');
-      
-      // ✅ تصحيح: استخدام property بدلاً من data
-      const propertyId = data.property?._id;
-      
-      if (isDraft) {
-        router.push('/my-properties?tab=drafts');
-      } else if (propertyId) {
-        router.push(`/properties/${propertyId}`);
-      } else {
-        router.push('/my-properties');
-      }
-    } else {
-      // ✅ تصحيح: استخدام error بدلاً من message
-      toast.error(data.error || 'حدث خطأ');
-    }
-    
-  } catch (error: any) {
-    console.error('Submit error:', error);
-    toast.error(error.message || 'حدث خطأ في الاتصال');
-  } finally {
-    setLoading(false);
-    setSavingDraft(false);
-  }
-};
-
-  const formatPrice = (price: string) => {
-    const num = parseInt(price.replace(/,/g, ''));
-    if (isNaN(num)) return '';
-    return num.toLocaleString('ar-SA');
-  };
-
   const getPropertyTypeLabel = (type: string) => {
     return propertyTypes.find((t) => t.value === type)?.label || type;
+  };
+
+  const handleSubmit = async (isDraft: boolean = false) => {
+    if (!isDraft && !validateStep(4)) return;
+
+    if (isDraft) {
+      setSavingDraft(true);
+    } else {
+      setLoading(true);
+    }
+
+    try {
+      const propertyData = {
+        propertyType: formData.propertyType,
+        listingType: formData.listingType,
+        title: formData.titleAr,
+        titleAr: formData.titleAr,
+        description: formData.descriptionAr,
+        descriptionAr: formData.descriptionAr,
+        price: parseInt(formData.price) || 0,
+        location: {
+          city: formData.location.city,
+          district: formData.location.district,
+          address: formData.location.address || '',
+          coordinates: formData.location.coordinates,
+        },
+        features: {
+          area: parseInt(formData.features.area) || 0,
+          bedrooms: formData.features.bedrooms ? parseInt(formData.features.bedrooms) : undefined,
+          bathrooms: formData.features.bathrooms ? parseInt(formData.features.bathrooms) : undefined,
+          floors: formData.features.floors ? parseInt(formData.features.floors) : undefined,
+          yearBuilt: formData.features.yearBuilt ? parseInt(formData.features.yearBuilt) : undefined,
+          parking: formData.features.parking,
+          pool: formData.features.pool,
+          garden: formData.features.garden,
+          airConditioning: formData.features.airConditioning,
+          security: formData.features.security,
+          elevator: formData.features.elevator,
+          furnished: formData.features.furnished,
+        },
+        images: formData.images,
+        status: isDraft ? 'draft' : 'available',
+      };
+
+      const response = await fetch('/api/properties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(propertyData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `خطأ في الخادم: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(isDraft ? 'تم حفظ المسودة' : 'تم نشر العقار بنجاح!');
+        
+        const propertyId = data.property?._id;
+        
+        if (isDraft) {
+          router.push('/my-properties?tab=drafts');
+        } else if (propertyId) {
+          router.push(`/properties/${propertyId}`);
+        } else {
+          router.push('/my-properties');
+        }
+      } else {
+        toast.error(data.error || 'حدث خطأ');
+      }
+      
+    } catch (error: unknown) {
+      console.error('Submit error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'حدث خطأ في الاتصال';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+      setSavingDraft(false);
+    }
   };
 
   return (
@@ -380,7 +407,6 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 <p className="text-gray-500">اختر نوع العقار الذي تريد إضافته</p>
               </div>
 
-              {/* Property Types Grid */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {propertyTypes.map((type) => (
                   <button
@@ -400,7 +426,6 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 ))}
               </div>
 
-              {/* Listing Type */}
               <div className="pt-6 border-t">
                 <h3 className="font-semibold text-gray-800 mb-4">الغرض من العقار</h3>
                 <div className="flex gap-4">
@@ -439,7 +464,6 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 <p className="text-gray-500">حدد موقع العقار بدقة</p>
               </div>
 
-              {/* City & District */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -473,7 +497,6 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 </div>
               </div>
 
-              {/* Full Address */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   العنوان التفصيلي
@@ -487,7 +510,6 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 />
               </div>
 
-              {/* ✅ Map - Leaflet (بدون MapLoader) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   حدد الموقع على الخريطة
@@ -546,7 +568,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 </div>
               </div>
 
-              {/* Price */}
+              {/* ✅ Price */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   السعر <span className="text-red-500">*</span>
@@ -554,18 +576,23 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 <div className="relative">
                   <input
                     type="text"
-                    value={formatPrice(formData.price)}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/[^0-9]/g, '');
-                      updateFormData({ price: value });
-                    }}
-                    placeholder="0"
-                    className="w-full px-4 py-3 pr-4 pl-24 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-lg"
+                    inputMode="numeric"
+                    value={formData.price ? formatPrice(formData.price) : ''}
+                    onChange={handlePriceChange}
+                    placeholder="أدخل السعر"
+                    className="w-full px-4 py-3 pr-4 pl-28 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-lg"
+                    dir="ltr"
+                    style={{ textAlign: 'right' }}
                   />
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none">
                     {formData.listingType === 'rent' ? 'ريال/شهرياً' : 'ريال'}
                   </div>
                 </div>
+                {formData.price && parseInt(formData.price) > 0 && (
+                  <p className="text-sm text-emerald-600 mt-1 font-medium">
+                    💰 {formatPrice(formData.price)} ريال سعودي
+                  </p>
+                )}
               </div>
 
               {/* Main Features */}
@@ -577,11 +604,13 @@ const handleSubmit = async (isDraft: boolean = false) => {
                   <div className="relative">
                     <FaRulerCombined className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={formData.features.area}
-                      onChange={(e) => updateFeatures({ area: e.target.value })}
+                      onChange={(e) => handleNumberChange(e, 'area')}
                       placeholder="0"
                       className="w-full pr-12 pl-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      dir="ltr"
                     />
                   </div>
                 </div>
@@ -595,12 +624,13 @@ const handleSubmit = async (isDraft: boolean = false) => {
                       <div className="relative">
                         <FaBed className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           value={formData.features.bedrooms}
-                          onChange={(e) => updateFeatures({ bedrooms: e.target.value })}
+                          onChange={(e) => handleNumberChange(e, 'bedrooms')}
                           placeholder="0"
-                          min="0"
                           className="w-full pr-12 pl-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          dir="ltr"
                         />
                       </div>
                     </div>
@@ -612,12 +642,13 @@ const handleSubmit = async (isDraft: boolean = false) => {
                       <div className="relative">
                         <FaBath className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           value={formData.features.bathrooms}
-                          onChange={(e) => updateFeatures({ bathrooms: e.target.value })}
+                          onChange={(e) => handleNumberChange(e, 'bathrooms')}
                           placeholder="0"
-                          min="0"
                           className="w-full pr-12 pl-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          dir="ltr"
                         />
                       </div>
                     </div>
@@ -629,12 +660,13 @@ const handleSubmit = async (isDraft: boolean = false) => {
                       <div className="relative">
                         <FaBuilding className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           value={formData.features.floors}
-                          onChange={(e) => updateFeatures({ floors: e.target.value })}
+                          onChange={(e) => handleNumberChange(e, 'floors')}
                           placeholder="0"
-                          min="0"
                           className="w-full pr-12 pl-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          dir="ltr"
                         />
                       </div>
                     </div>
@@ -642,7 +674,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 )}
               </div>
 
-              {/* Year Built */}
+              {/* Year Built - مرة واحدة فقط */}
               {formData.propertyType !== 'land' && (
                 <div className="max-w-xs">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -651,13 +683,14 @@ const handleSubmit = async (isDraft: boolean = false) => {
                   <div className="relative">
                     <FaCalendarAlt className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={formData.features.yearBuilt}
-                      onChange={(e) => updateFeatures({ yearBuilt: e.target.value })}
+                      onChange={(e) => handleNumberChange(e, 'yearBuilt')}
                       placeholder="2020"
-                      min="1900"
-                      max={new Date().getFullYear()}
+                      maxLength={4}
                       className="w-full pr-12 pl-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      dir="ltr"
                     />
                   </div>
                 </div>
@@ -670,7 +703,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
                     مميزات إضافية
                   </label>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {features.map((feature) => (
+                    {featuresList.map((feature) => (
                       <button
                         key={feature.key}
                         type="button"
@@ -712,7 +745,6 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 maxImages={10}
               />
 
-              {/* Tips */}
               <div className="bg-amber-50 rounded-xl p-4">
                 <h4 className="font-semibold text-amber-800 mb-2">💡 نصائح للصور</h4>
                 <ul className="text-sm text-amber-700 space-y-1">
@@ -733,9 +765,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 <p className="text-gray-500">راجع بيانات العقار قبل النشر</p>
               </div>
 
-              {/* Preview Card */}
               <div className="border rounded-2xl overflow-hidden">
-                {/* Images */}
                 {formData.images.length > 0 && (
                   <div className="relative h-64">
                     <Image
@@ -762,7 +792,6 @@ const handleSubmit = async (isDraft: boolean = false) => {
                   </div>
                 )}
 
-                {/* Details */}
                 <div className="p-6">
                   <div className="text-2xl font-bold text-emerald-600 mb-2">
                     {formatPrice(formData.price)} ريال
@@ -778,7 +807,6 @@ const handleSubmit = async (isDraft: boolean = false) => {
                     <span>{formData.location.district}، {formData.location.city}</span>
                   </div>
 
-                  {/* Features */}
                   <div className="flex flex-wrap gap-4 pt-4 border-t">
                     {formData.features.area && (
                       <div className="flex items-center gap-2 text-gray-600">
@@ -800,19 +828,17 @@ const handleSubmit = async (isDraft: boolean = false) => {
                     )}
                   </div>
 
-                  {/* Description */}
                   {formData.descriptionAr && (
                     <p className="text-gray-600 mt-4 pt-4 border-t">
                       {formData.descriptionAr}
                     </p>
                   )}
 
-                  {/* Additional Features */}
                   {Object.entries(formData.features)
-                    .filter(([key, value]) => typeof value === 'boolean' && value)
+                    .filter(([, value]) => typeof value === 'boolean' && value)
                     .length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
-                      {features
+                      {featuresList
                         .filter((f) => formData.features[f.key as keyof typeof formData.features])
                         .map((f) => (
                           <span
@@ -827,7 +853,6 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 </div>
               </div>
 
-              {/* Summary Table */}
               <div className="bg-gray-50 rounded-xl p-6">
                 <h4 className="font-semibold text-gray-800 mb-4">ملخص البيانات</h4>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -888,7 +913,6 @@ const handleSubmit = async (isDraft: boolean = false) => {
             </div>
 
             <div className="flex items-center gap-4">
-              {/* Save as Draft */}
               {currentStep < 5 && (
                 <button
                   type="button"
@@ -905,7 +929,6 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 </button>
               )}
 
-              {/* Next / Submit */}
               {currentStep < 5 ? (
                 <button
                   type="button"
