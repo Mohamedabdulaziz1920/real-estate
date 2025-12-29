@@ -4,9 +4,10 @@ import GoogleProvider from 'next-auth/providers/google';
 import dbConnect from './mongodb';
 import User from '../models/User';
 import bcrypt from 'bcryptjs';
-import type { NextAuthOptions } from 'next-auth';
+import type { NextAuthConfig } from 'next-auth';
+import type { UserRole } from '@/types/next-auth'; // ← أضف هذا الاستيراد
 
-const authOptions: NextAuthOptions = {
+const authOptions: NextAuthConfig = {
   providers: [
     CredentialsProvider({
       name: 'credentials',
@@ -17,11 +18,14 @@ const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         await dbConnect();
         
-        if (!credentials?.email || !credentials?.password) {
+        const email = credentials?.email as string | undefined;
+        const password = credentials?.password as string | undefined;
+
+        if (!email || !password) {
           throw new Error('البريد الإلكتروني وكلمة المرور مطلوبان');
         }
 
-        const user = await User.findOne({ email: credentials.email })
+        const user = await User.findOne({ email: email })
           .select('+password')
           .lean();
 
@@ -34,8 +38,8 @@ const authOptions: NextAuthOptions = {
         }
 
         const isPasswordCorrect = await bcrypt.compare(
-          credentials.password,
-          user.password
+          password,
+          user.password as string
         );
 
         if (!isPasswordCorrect) {
@@ -47,12 +51,11 @@ const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           image: user.image || null,
-          role: user.role || 'user',
+          role: (user.role as UserRole) || 'user', // ← تحديث هنا
         };
       },
     }),
 
-    // Google Provider فقط إذا كانت المفاتيح موجودة
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? [
           GoogleProvider({
@@ -65,10 +68,9 @@ const authOptions: NextAuthOptions = {
 
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 يوم
+    maxAge: 30 * 24 * 60 * 60,
   },
 
-  // استخدم NEXTAUTH_SECRET بدون قيمة افتراضية
   secret: process.env.NEXTAUTH_SECRET,
 
   pages: {
@@ -80,11 +82,11 @@ const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
+        token.id = user.id ?? ""; 
         token.email = user.email;
         token.name = user.name;
         token.image = user.image;
-        token.role = user.role;
+        token.role = user.role as UserRole; // ← تحديث هنا
       }
       
       return token;
@@ -96,7 +98,7 @@ const authOptions: NextAuthOptions = {
         session.user.email = token.email as string;
         session.user.name = token.name as string;
         session.user.image = token.image as string;
-        session.user.role = token.role as string;
+        session.user.role = token.role as UserRole; // ← هذا هو الحل ✅
       }
       return session;
     },
