@@ -3,6 +3,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 
+// ✅ أضف هذه الإعدادات الجديدة في الأعلى
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -80,7 +84,7 @@ export async function POST(request: NextRequest) {
         });
 
         uploadedImages.push(result.secure_url);
-      } catch (uploadError: any) {
+      } catch (uploadError: unknown) {
         console.error(`Error uploading ${file.name}:`, uploadError);
         errors.push(`${file.name}: فشل في الرفع`);
       }
@@ -102,20 +106,21 @@ export async function POST(request: NextRequest) {
       images: uploadedImages,
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Upload error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'حدث خطأ في رفع الصور';
     return NextResponse.json(
-      { success: false, message: error.message || 'حدث خطأ في رفع الصور' },
+      { success: false, message: errorMessage },
       { status: 500 }
     );
   }
 }
 
-// زيادة حد حجم الطلب
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb',
-    },
-  },
-};
+// ❌ احذف هذا الكود القديم تماماً:
+// export const config = {
+//   api: {
+//     bodyParser: {
+//       sizeLimit: '50mb',
+//     },
+//   },
+// };

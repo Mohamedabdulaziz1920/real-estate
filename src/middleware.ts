@@ -3,22 +3,11 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
-// الحصول على الـ secret
-const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
-
-export default async function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  // السماح بالوصول لصفحات المصادقة والملفات الثابتة
-  if (
-    pathname.startsWith('/auth/') || 
-    pathname.startsWith('/api/auth/') ||
-    pathname.startsWith('/_next/') ||
-    pathname.startsWith('/images/') ||
-    pathname.includes('.')
-  ) {
-    return NextResponse.next();
-  }
+  // الحصول على الـ secret
+  const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
   
   // المسارات المحمية
   const protectedPaths = [
@@ -41,7 +30,6 @@ export default async function middleware(request: NextRequest) {
     // التحقق من وجود الـ secret
     if (!secret) {
       console.error('NEXTAUTH_SECRET is not defined');
-      // في حالة عدم وجود secret، نسمح بالمرور ونترك الصفحة تتعامل مع المصادقة
       return NextResponse.next();
     }
 
@@ -60,7 +48,7 @@ export default async function middleware(request: NextRequest) {
       
       // التحقق من صلاحيات الأدمن
       if (pathname.startsWith('/admin') && token.role !== 'admin') {
-        return NextResponse.redirect(new URL('/', request.url));
+        return NextResponse.redirect(new URL('/unauthorized', request.url));
       }
     } catch (error) {
       console.error('Middleware error:', error);
@@ -73,14 +61,14 @@ export default async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/add-property/:path*',
-    '/profile/:path*',
-    '/settings/:path*',
-    '/my-properties/:path*',
-    '/favorites/:path*',
-    '/messages/:path*',
-    '/admin/:path*',
-    '/dashboard/:path*',
-    '/edit-property/:path*',
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public folder
+     * - api/auth (auth endpoints)
+     */
+    '/((?!_next/static|_next/image|favicon.ico|images|api/auth).*)',
   ],
 };
