@@ -1,13 +1,31 @@
-// src/middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
+
+// ⭐ أضف هذا السطر ⭐
+export const dynamic = 'force-dynamic';
+
+// ⭐ استبدل export const config بـ export const matcher ⭐
+export const matcher = [
+  '/((?!_next/static|_next/image|favicon.ico|images|api/auth).*)',
+];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
   // الحصول على الـ secret
   const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+  
+  // السماح بالوصول لصفحات المصادقة والملفات الثابتة
+  if (
+    pathname.startsWith('/auth/') || 
+    pathname.startsWith('/api/auth/') ||
+    pathname.startsWith('/_next/') ||
+    pathname.startsWith('/images/') ||
+    pathname.includes('.')
+  ) {
+    return NextResponse.next();
+  }
   
   // المسارات المحمية
   const protectedPaths = [
@@ -58,17 +76,3 @@ export async function middleware(request: NextRequest) {
   
   return NextResponse.next();
 }
-
-export const config = {
-  matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     * - api/auth (auth endpoints)
-     */
-    '/((?!_next/static|_next/image|favicon.ico|images|api/auth).*)',
-  ],
-};
