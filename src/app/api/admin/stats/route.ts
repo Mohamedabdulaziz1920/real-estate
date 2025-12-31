@@ -4,6 +4,9 @@ import dbConnect from '@/lib/mongodb';
 import Property from '@/models/Property';
 import User from '@/models/User';
 
+// ⭐ أضف هذا السطر ⭐
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const session = await auth();
