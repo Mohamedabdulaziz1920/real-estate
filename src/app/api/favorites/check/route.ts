@@ -3,6 +3,9 @@ import { auth } from "@/auth"; // تأكد من مسار الاستيراد ال
 import dbConnect from "@/lib/mongodb";
 import User from "@/models/User";
 
+// ⭐ أضف هذا السطر ⭐
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
