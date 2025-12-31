@@ -1,22 +1,21 @@
-// src/auth.ts
+// src/auth.ts - النسخة الكاملة المصححة
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
-import clientPromise from "@/lib/mongodb";
+import clientPromise from "@/lib/mongodb"; // تأكد من أن هذا الملف يصدر MongoClient
 import bcrypt from "bcryptjs";
-import { authConfig } from "./auth.config";
 
-// ✅ التأكد من وجود متغيرات البيئة
-if (!process.env.AUTH_SECRET) {
-  throw new Error("AUTH_SECRET is not defined in environment variables");
+// ✅ تأكد من وجود المتغيرات
+if (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET) {
+  throw new Error("AUTH_SECRET or NEXTAUTH_SECRET is not defined");
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // ✅ استخدام adapter مع MongoDB
+  // ⭐ 1. Adapter مهم جداً
   adapter: MongoDBAdapter(clientPromise),
   
-  // ✅ الصفحات المخصصة
+  // ⭐ 2. الصفحات
   pages: {
     signIn: "/auth/login",
     signOut: "/auth/logout",
@@ -24,13 +23,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     newUser: "/auth/register",
   },
   
-  // ✅ إعدادات الجلسة
+  // ⭐ 3. إعدادات الجلسة
   session: {
-    strategy: "jwt",
+    strategy: "jwt", // تأكد من أن هذا موجود
     maxAge: 30 * 24 * 60 * 60, // 30 يوم
   },
   
-  // ✅ Providers
+  // ⭐ 4. Providers
   providers: [
     Credentials({
       name: "credentials",
@@ -44,8 +43,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             throw new Error("البريد الإلكتروني وكلمة المرور مطلوبان");
           }
 
-          // استيراد ديناميكي لتجنب مشاكل البناء
-          const dbConnect = (await import("@/lib/mongodb")).default;
+          // استيراد ديناميكي
+          const dbConnect = (await import("@/lib/mongoose")).default; // استخدم mongoose هنا
           const User = (await import("@/models/User")).default;
 
           await dbConnect();
@@ -58,12 +57,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             throw new Error("البريد الإلكتروني أو كلمة المرور غير صحيحة");
           }
 
-          // التحقق إذا كان المستخدم مسجل عبر Google
           if (!user.password) {
-            throw new Error("هذا الحساب مسجل بواسطة Google. الرجاء استخدام تسجيل الدخول عبر Google");
+            throw new Error("هذا الحساب مسجل بواسطة Google");
           }
 
-          // التحقق من كلمة المرور
           const isValid = await bcrypt.compare(
             credentials.password.toString(),
             user.password
@@ -73,12 +70,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             throw new Error("البريد الإلكتروني أو كلمة المرور غير صحيحة");
           }
 
-          // التحقق من حالة الحساب
+          // ✅ أضف التحقق من isActive
           if (user.isActive === false) {
             throw new Error("الحساب معطل. يرجى التواصل مع الإدارة");
           }
 
-          // إرجاع بيانات المستخدم
           return {
             id: user._id.toString(),
             name: user.name,
@@ -95,14 +91,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Google({
       clientId: process.env.AUTH_GOOGLE_ID || process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.AUTH_GOOGLE_SECRET || process.env.GOOGLE_CLIENT_SECRET || "",
-      allowDangerousEmailAccountLinking: true,
     }),
   ],
   
-  // ✅ Callbacks مهمة لإضافة البيانات إلى الجلسة
+  // ⭐ 5. Callbacks مهمة جداً
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
-      // عند تسجيل الدخول
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.role = user.role;
@@ -110,12 +104,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.name = user.name;
         token.image = user.image;
       }
-      
-      // عند تحديث الجلسة
-      if (trigger === "update" && session) {
-        token = { ...token, ...session };
-      }
-      
       return token;
     },
     
@@ -141,12 +129,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }
   },
   
-  // ✅ إعدادات مهمة
-  secret: process.env.AUTH_SECRET,
+  // ⭐ 6. الإعدادات الأساسية
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   trustHost: true,
-  debug: process.env.NODE_ENV === "development",
   
-  // ✅ إعدادات الـ Cookies
+  // ⭐ 7. إعدادات الـ Cookies
   cookies: {
     sessionToken: {
       name: `next-auth.session-token`,
@@ -155,7 +142,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         sameSite: "lax",
         path: "/",
         secure: process.env.NODE_ENV === "production",
-        maxAge: 30 * 24 * 60 * 60, // 30 يوم
+        maxAge: 30 * 24 * 60 * 60,
       },
     },
   },
