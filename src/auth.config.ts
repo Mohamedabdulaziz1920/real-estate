@@ -1,24 +1,48 @@
 // src/auth.config.ts
 import type { NextAuthConfig } from "next-auth";
-import { UserRole } from "@/types/next-auth"; 
 
 export const authConfig: NextAuthConfig = {
+  // ✅ صفحات مخصصة
   pages: {
     signIn: "/auth/login",
+    signOut: "/auth/logout",
     error: "/auth/error",
+    newUser: "/auth/register",
   },
-
+  
+  // ✅ إعدادات الجلسة
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 يوم
   },
-
+  
+  // ✅ Callbacks للمصادقة في الـ middleware
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const userRole = auth?.user?.role;
-      const isOnDashboard = nextUrl.pathname.startsWith("/dashboard") || nextUrl.pathname.startsWith("/admin");
+      const pathname = nextUrl.pathname;
       
+      // ✅ المسارات العامة (لا تحتاج مصادقة)
+      const publicPaths = [
+        "/",
+        "/auth/login",
+        "/auth/register",
+        "/auth/forgot-password",
+        "/auth/reset-password",
+        "/properties",
+        "/api/auth",
+        "/_next",
+        "/images",
+        "/favicon.ico",
+      ];
+      
+      // ✅ التحقق من المسارات العامة أولاً
+      if (publicPaths.some(path => pathname.startsWith(path))) {
+        return true;
+      }
+      
+      // ✅ المسارات المحمية
       const protectedPaths = [
         "/add-property",
         "/profile",
@@ -26,49 +50,34 @@ export const authConfig: NextAuthConfig = {
         "/my-properties",
         "/favorites",
         "/messages",
+        "/dashboard",
+        "/admin",
+        "/edit-property",
       ];
-
-      const isProtectedRoute = protectedPaths.some((path) =>
-        nextUrl.pathname.startsWith(path)
+      
+      const isProtectedRoute = protectedPaths.some(path => 
+        pathname.startsWith(path)
       );
-
-      if (isOnDashboard) {
-        if (!isLoggedIn) return false;
-        if (userRole === "user") {
-            return Response.redirect(new URL("/", nextUrl));
+      
+      if (isProtectedRoute) {
+        // إذا لم يكن مسجلاً
+        if (!isLoggedIn) {
+          return false;
         }
+        
+        // ✅ التحقق من صلاحيات الأدمن
+        if (pathname.startsWith("/admin") && userRole !== "admin") {
+          return false;
+        }
+        
         return true;
       }
-
-      if (isProtectedRoute) {
-        if (isLoggedIn) return true;
-        return false;
-      }
-
+      
       return true;
-    },
-
-    jwt({ token, user }) {
-      if (user) {
-        // ✅ الإصلاح هنا: استخدام (?? "") لضمان أن القيمة نص دائماً
-        token.id = user.id ?? "";
-        token.role = user.role;
-      }
-      return token;
-    },
-
-    session({ session, token }) {
-      if (session.user && token) {
-        // ✅ نستخدم as string هنا لأن token.id قد يكون مخزناً كـ undefined في حالات نادرة
-        session.user.id = token.id as string;     
-        session.user.role = token.role; 
-      }
-      return session;
     },
   },
   
-  secret: process.env.NEXTAUTH_SECRET,
+  // ✅ إعدادات أخرى
   trustHost: true,
-  providers: [], 
-
+  debug: process.env.NODE_ENV === "development",
 } satisfies NextAuthConfig;
