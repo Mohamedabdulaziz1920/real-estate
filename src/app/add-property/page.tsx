@@ -31,19 +31,16 @@ import {
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
-// ✅ تحميل LocationPicker بشكل ديناميكي (بدون SSR)
+// استيراد ديناميكي
 const LocationPicker = dynamic(
   () => import('@/components/maps/LocationPicker'),
   { 
     ssr: false,
     loading: () => (
-      <div className="h-[350px] bg-gray-100 rounded-xl flex items-center justify-center">
-        <div className="text-center">
-          <FaSpinner className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-2" />
-          <p className="text-gray-500">جاري تحميل الخريطة...</p>
-        </div>
+      <div className="h-[400px] bg-gray-100 animate-pulse rounded-lg flex items-center justify-center">
+        <span className="text-gray-500">جاري تحميل الخريطة...</span>
       </div>
-    )
+    ),
   }
 );
 
@@ -144,7 +141,7 @@ const initialFormData: FormData = {
   images: [],
 };
 
-// ✅ دالة تحويل الأرقام العربية إلى إنجليزية (خارج المكون - OK)
+// دوال مساعدة خارج المكون
 const arabicToEnglishNumbers = (str: string): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
   let result = str;
@@ -154,7 +151,6 @@ const arabicToEnglishNumbers = (str: string): string => {
   return result;
 };
 
-// ✅ دالة تنسيق السعر (خارج المكون - OK)
 const formatPrice = (price: string): string => {
   const cleanPrice = price.replace(/[^\d]/g, '');
   if (!cleanPrice) return '';
@@ -167,6 +163,7 @@ export default function AddPropertyPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   
+  // ✅ جميع الـ states في البداية
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [loading, setLoading] = useState(false);
@@ -186,7 +183,7 @@ export default function AddPropertyPage() {
     return null;
   }
 
-  // ✅ دوال التحديث (داخل المكون)
+  // ✅ دوال التحديث
   const updateFormData = (updates: Partial<FormData>) => {
     setFormData((prev) => ({ ...prev, ...updates }));
   };
@@ -205,7 +202,16 @@ export default function AddPropertyPage() {
     }));
   };
 
-  // ✅ دالة معالجة تغيير السعر (داخل المكون)
+  // ✅ دالة معالجة تغيير الموقع من الخريطة - في المكان الصحيح
+  const handleLocationChange = (lat: number, lng: number, address?: string) => {
+    console.log('Location selected:', { lat, lng, address });
+    updateLocation({
+      coordinates: { lat, lng },
+      address: address || formData.location.address,
+    });
+  };
+
+  // دالة معالجة تغيير السعر
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
     value = arabicToEnglishNumbers(value);
@@ -213,7 +219,7 @@ export default function AddPropertyPage() {
     updateFormData({ price: value });
   };
 
-  // ✅ دالة معالجة تغيير الأرقام (داخل المكون)
+  // دالة معالجة تغيير الأرقام
   const handleNumberChange = (
     e: React.ChangeEvent<HTMLInputElement>,
     field: keyof FormData['features']
@@ -510,36 +516,35 @@ export default function AddPropertyPage() {
                 />
               </div>
 
+              {/* ✅ الخريطة */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   حدد الموقع على الخريطة
                 </label>
                 <LocationPicker
-                  initialLocation={formData.location.coordinates || null}
-                  onLocationSelect={(location) => {
-                    updateLocation({
-                      address: location.address || formData.location.address,
-                      coordinates: {
-                        lat: location.lat,
-                        lng: location.lng,
-                      },
-                    });
-                  }}
-                  height="350px"
+                  onLocationChange={handleLocationChange}
+                  initialLat={formData.location.coordinates?.lat || 24.7136}
+                  initialLng={formData.location.coordinates?.lng || 46.6753}
+                  height="400px"
                 />
+                {formData.location.coordinates && (
+                  <p className="text-sm text-emerald-600 mt-2">
+                    ✅ تم تحديد الموقع: {formData.location.coordinates.lat.toFixed(4)}, {formData.location.coordinates.lng.toFixed(4)}
+                  </p>
+                )}
               </div>
             </div>
           )}
 
-          {/* Step 3: Details */}
+          {/* Step 3: Details - نفس الكود السابق */}
           {currentStep === 3 && (
             <div className="space-y-6">
+              {/* ... باقي كود Step 3 كما هو ... */}
               <div>
                 <h2 className="text-xl font-bold text-gray-800 mb-2">تفاصيل العقار</h2>
                 <p className="text-gray-500">أضف معلومات تفصيلية عن العقار</p>
               </div>
 
-              {/* Title & Description */}
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -568,7 +573,6 @@ export default function AddPropertyPage() {
                 </div>
               </div>
 
-              {/* ✅ Price */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   السعر <span className="text-red-500">*</span>
@@ -588,14 +592,8 @@ export default function AddPropertyPage() {
                     {formData.listingType === 'rent' ? 'ريال/شهرياً' : 'ريال'}
                   </div>
                 </div>
-                {formData.price && parseInt(formData.price) > 0 && (
-                  <p className="text-sm text-emerald-600 mt-1 font-medium">
-                    💰 {formatPrice(formData.price)} ريال سعودي
-                  </p>
-                )}
               </div>
 
-              {/* Main Features */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -674,59 +672,57 @@ export default function AddPropertyPage() {
                 )}
               </div>
 
-              {/* Year Built - مرة واحدة فقط */}
               {formData.propertyType !== 'land' && (
-                <div className="max-w-xs">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    سنة البناء
-                  </label>
-                  <div className="relative">
-                    <FaCalendarAlt className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={formData.features.yearBuilt}
-                      onChange={(e) => handleNumberChange(e, 'yearBuilt')}
-                      placeholder="2020"
-                      maxLength={4}
-                      className="w-full pr-12 pl-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      dir="ltr"
-                    />
+                <>
+                  <div className="max-w-xs">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      سنة البناء
+                    </label>
+                    <div className="relative">
+                      <FaCalendarAlt className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={formData.features.yearBuilt}
+                        onChange={(e) => handleNumberChange(e, 'yearBuilt')}
+                        placeholder="2020"
+                        maxLength={4}
+                        className="w-full pr-12 pl-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        dir="ltr"
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
 
-              {/* Additional Features */}
-              {formData.propertyType !== 'land' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-4">
-                    مميزات إضافية
-                  </label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {featuresList.map((feature) => (
-                      <button
-                        key={feature.key}
-                        type="button"
-                        onClick={() =>
-                          updateFeatures({
-                            [feature.key]: !formData.features[feature.key as keyof typeof formData.features],
-                          })
-                        }
-                        className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
-                          formData.features[feature.key as keyof typeof formData.features]
-                            ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <feature.icon className="w-5 h-5" />
-                        <span className="font-medium">{feature.label}</span>
-                        {formData.features[feature.key as keyof typeof formData.features] && (
-                          <FaCheck className="w-4 h-4 mr-auto" />
-                        )}
-                      </button>
-                    ))}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-4">
+                      مميزات إضافية
+                    </label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {featuresList.map((feature) => (
+                        <button
+                          key={feature.key}
+                          type="button"
+                          onClick={() =>
+                            updateFeatures({
+                              [feature.key]: !formData.features[feature.key as keyof typeof formData.features],
+                            })
+                          }
+                          className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                            formData.features[feature.key as keyof typeof formData.features]
+                              ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <feature.icon className="w-5 h-5" />
+                          <span className="font-medium">{feature.label}</span>
+                          {formData.features[feature.key as keyof typeof formData.features] && (
+                            <FaCheck className="w-4 h-4 mr-auto" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
           )}
@@ -784,11 +780,6 @@ export default function AddPropertyPage() {
                         {getPropertyTypeLabel(formData.propertyType)}
                       </span>
                     </div>
-                    {formData.images.length > 1 && (
-                      <div className="absolute bottom-4 right-4 px-3 py-1 bg-black/50 text-white text-sm rounded-full">
-                        +{formData.images.length - 1} صور
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -832,23 +823,6 @@ export default function AddPropertyPage() {
                     <p className="text-gray-600 mt-4 pt-4 border-t">
                       {formData.descriptionAr}
                     </p>
-                  )}
-
-                  {Object.entries(formData.features)
-                    .filter(([, value]) => typeof value === 'boolean' && value)
-                    .length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
-                      {featuresList
-                        .filter((f) => formData.features[f.key as keyof typeof formData.features])
-                        .map((f) => (
-                          <span
-                            key={f.key}
-                            className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-sm"
-                          >
-                            {f.label}
-                          </span>
-                        ))}
-                    </div>
                   )}
                 </div>
               </div>

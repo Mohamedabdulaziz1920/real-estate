@@ -1,193 +1,206 @@
-// components/maps/LocationPicker.tsx
-
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
-import { FaMapMarkerAlt, FaSearch, FaSpinner } from 'react-icons/fa';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import dynamic from 'next/dynamic';
+import { useState, useCallback } from 'react';
 
-// Fix Leaflet marker icon
-const icon = L.icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
+// تحميل ديناميكي بدون SSR
+const MapComponent = dynamic(() => import('./MapComponent'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[400px] w-full bg-gray-100 animate-pulse rounded-lg flex items-center justify-center">
+      <span className="text-gray-500">جاري تحميل الخريطة...</span>
+    </div>
+  ),
 });
 
-interface Location {
-  lat: number;
-  lng: number;
-  address?: string;
-}
-
 interface LocationPickerProps {
-  initialLocation?: Location | null;
-  onLocationSelect: (location: Location) => void;
+  onLocationChange: (lat: number, lng: number, address?: string) => void;
+  initialLat?: number;
+  initialLng?: number;
   height?: string;
 }
 
-const defaultCenter = { lat: 24.7136, lng: 46.6753 };
-
-function ClickHandler({ onLocationSelect }: { onLocationSelect: (loc: Location) => void }) {
-  useMapEvents({
-    async click(e) {
-      const { lat, lng } = e.latlng;
-      let address = '';
-      
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=ar`
-        );
-        const data = await res.json();
-        address = data.display_name || '';
-      } catch (err) {
-        console.log('Could not get address');
-      }
-      
-      onLocationSelect({ lat, lng, address });
-    },
-  });
-  return null;
-}
-
 export default function LocationPicker({
-  initialLocation,
-  onLocationSelect,
+  onLocationChange,
+  initialLat = 24.7136,
+  initialLng = 46.6753,
   height = '400px',
 }: LocationPickerProps) {
-  const [marker, setMarker] = useState<Location | null>(initialLocation || null);
-  const [searchValue, setSearchValue] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [results, setResults] = useState<any[]>([]);
-  const mapRef = useRef<L.Map | null>(null);
+  const [coordinates, setCoordinates] = useState({
+    lat: initialLat,
+    lng: initialLng,
+  });
+  const [address, setAddress] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
-  const handleSelect = (location: Location) => {
-    setMarker(location);
-    onLocationSelect(location);
-  };
-
-  const search = async () => {
-    if (!searchValue.trim()) return;
-    setSearching(true);
-    
+  const fetchAddress = async (lat: number, lng: number) => {
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchValue)}&countrycodes=sa&accept-language=ar&limit=5`
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=ar`
       );
-      setResults(await res.json());
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSearching(false);
+      const data = await response.json();
+      return data.display_name || '';
+    } catch (error) {
+      console.error('Error fetching address:', error);
+      return '';
     }
   };
 
-  const selectResult = (r: any) => {
-    const loc = { lat: parseFloat(r.lat), lng: parseFloat(r.lon), address: r.display_name };
-    setMarker(loc);
-    onLocationSelect(loc);
-    setResults([]);
-    setSearchValue(r.display_name);
-    mapRef.current?.setView([loc.lat, loc.lng], 15);
+  const handleLocationSelect = useCallback(
+    async (lat: number, lng: number) => {
+      setCoordinates({ lat, lng });
+      setIsLoading(true);
+
+      const newAddress = await fetchAddress(lat, lng);
+      setAddress(newAddress);
+      onLocationChange(lat, lng, newAddress);
+
+      setIsLoading(false);
+    },
+    [onLocationChange]
+  );
+
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert('المتصفح لا يدعم تحديد الموقع');
+      return;
+    }
+
+    setIsGettingLocation(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        handleLocationSelect(position.coords.latitude, position.coords.longitude);
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+        alert('لم نتمكن من الحصول على موقعك الحالي');
+        setIsGettingLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
   };
 
   return (
     <div className="space-y-4">
-      {/* Search */}
-      <div className="relative">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <FaSearch className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && search()}
-              placeholder="ابحث عن موقع..."
-              className="w-full pr-12 pl-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={search}
-            disabled={searching}
-            className="px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50"
-          >
-            {searching ? <FaSpinner className="animate-spin" /> : 'بحث'}
-          </button>
-        </div>
-
-        {results.length > 0 && (
-          <div className="absolute z-[1000] w-full mt-2 bg-white rounded-xl shadow-lg border max-h-60 overflow-y-auto">
-            {results.map((r, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => selectResult(r)}
-                className="w-full px-4 py-3 text-right hover:bg-gray-50 border-b last:border-0"
-              >
-                <div className="flex items-start gap-2">
-                  <FaMapMarkerAlt className="w-4 h-4 text-emerald-500 mt-1" />
-                  <span className="text-sm text-gray-700 line-clamp-2">{r.display_name}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Map */}
-      <div className="rounded-xl overflow-hidden border border-gray-200" style={{ height }}>
-        <MapContainer
-          center={[marker?.lat || defaultCenter.lat, marker?.lng || defaultCenter.lng]}
-          zoom={marker ? 15 : 10}
-          style={{ height: '100%', width: '100%' }}
-          ref={mapRef}
+      {/* زر الموقع الحالي */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={getCurrentLocation}
+          disabled={isGettingLocation}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
-          <TileLayer
-            attribution='&copy; OpenStreetMap'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <ClickHandler onLocationSelect={handleSelect} />
-          {marker && (
-            <Marker
-              position={[marker.lat, marker.lng]}
-              icon={icon}
-              draggable
-              eventHandlers={{
-                dragend: async (e) => {
-                  const { lat, lng } = e.target.getLatLng();
-                  let address = '';
-                  try {
-                    const res = await fetch(
-                      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=ar`
-                    );
-                    address = (await res.json()).display_name || '';
-                  } catch {}
-                  handleSelect({ lat, lng, address });
-                },
-              }}
-            />
+          {isGettingLocation ? (
+            <>
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  fill="none"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+              <span>جاري تحديد الموقع...</span>
+            </>
+          ) : (
+            <>
+              <span>📍</span>
+              <span>موقعي الحالي</span>
+            </>
           )}
-        </MapContainer>
+        </button>
       </div>
 
-      {/* Selected Location */}
-      {marker && (
-        <div className="flex items-start gap-3 p-4 bg-emerald-50 rounded-xl">
-          <FaMapMarkerAlt className="w-5 h-5 text-emerald-600 mt-0.5" />
-          <div>
-            <p className="font-medium text-emerald-800">الموقع المحدد</p>
-            {marker.address && <p className="text-sm text-emerald-600 mt-1">{marker.address}</p>}
-            <p className="text-xs text-emerald-500 mt-1">
-              {marker.lat.toFixed(6)}, {marker.lng.toFixed(6)}
-            </p>
-          </div>
+      {/* الخريطة */}
+      <div className="relative rounded-lg overflow-hidden border border-gray-200">
+        <MapComponent
+          center={[coordinates.lat, coordinates.lng]}
+          zoom={15}
+          onLocationSelect={handleLocationSelect}
+          selectedPosition={[coordinates.lat, coordinates.lng]}
+          height={height}
+          interactive={true}
+        />
+      </div>
+
+      {/* الإحداثيات */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            خط العرض (Latitude)
+          </label>
+          <input
+            type="text"
+            value={coordinates.lat.toFixed(6)}
+            readOnly
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            خط الطول (Longitude)
+          </label>
+          <input
+            type="text"
+            value={coordinates.lng.toFixed(6)}
+            readOnly
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+          />
+        </div>
+      </div>
+
+      {/* العنوان */}
+      {isLoading && (
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+              fill="none"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            />
+          </svg>
+          <span>جاري جلب العنوان...</span>
         </div>
       )}
+
+      {address && !isLoading && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            العنوان
+          </label>
+          <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-200">
+            {address}
+          </p>
+        </div>
+      )}
+
+      <p className="text-xs text-gray-500">
+        💡 انقر على الخريطة لتحديد الموقع أو استخدم زر &quot;موقعي الحالي&quot;
+      </p>
     </div>
   );
 }
