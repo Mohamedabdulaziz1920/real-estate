@@ -3,6 +3,9 @@ import { auth } from '@/auth';
 import dbConnect from '@/lib/mongodb';
 import Conversation from '@/models/Conversation';
 
+// ⭐ أضف هذا السطر ⭐
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const session = await auth();

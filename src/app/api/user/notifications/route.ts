@@ -3,6 +3,9 @@ import { auth } from '@/auth';
 import dbConnect from '@/lib/mongodb';
 import User from '@/models/User';
 
+// ⭐ أضف هذا السطر ⭐
+export const dynamic = 'force-dynamic';
+
 // GET - جلب إعدادات الإشعارات
 export async function GET() {
   try {

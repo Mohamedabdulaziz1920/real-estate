@@ -2,20 +2,9 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // ⭐ إعدادات الصور
   images: {
     remotePatterns: [
-      // Unsplash
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-        pathname: '/**',
-      },
-      // Pexels
-      {
-        protocol: 'https',
-        hostname: 'images.pexels.com',
-        pathname: '/**',
-      },
       // Cloudinary
       {
         protocol: 'https',
@@ -28,7 +17,19 @@ const nextConfig = {
         hostname: 'lh3.googleusercontent.com',
         pathname: '/**',
       },
-      // UploadThing (إذا كنت تستخدمه)
+      // Unsplash
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+        pathname: '/**',
+      },
+      // Pexels
+      {
+        protocol: 'https',
+        hostname: 'images.pexels.com',
+        pathname: '/**',
+      },
+      // UploadThing
       {
         protocol: 'https',
         hostname: 'utfs.io',
@@ -40,31 +41,30 @@ const nextConfig = {
         pathname: '/**',
       },
     ],
+    
     // إعدادات إضافية للصور
     minimumCacheTTL: 60,
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
   
-  // ✅ في Next.js 14.2+، serverActions مستقرة ولا تحتاج experimental
-  // إذا أردت تغيير حجم body، استخدم هذا:
+  // ⭐ إعدادات تجريبية (مهمة لـ serverActions)
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',
     },
   },
   
-  // تجاهل أخطاء ESLint أثناء البناء
+  // ⭐ تجاوز أخطاء البناء (مؤقتاً)
   eslint: {
     ignoreDuringBuilds: true,
   },
   
-  // تجاهل أخطاء TypeScript أثناء البناء (مؤقتاً)
   typescript: {
-    ignoreBuildErrors: true, // ✅ غيّرته إلى true لتجاوز الأخطاء مؤقتاً
+    ignoreBuildErrors: true,
   },
-
-  // إضافة headers للأمان
+  
+  // ⭐ إضافة headers للأمان
   async headers() {
     return [
       {
@@ -94,6 +94,37 @@ const nextConfig = {
       }
     ]
   },
+  
+  // ⭐ إعدادات webpack لحل مشكلة الحزم الخارجية
+  webpack: (config, { isServer }) => {
+    // حل مشكلة الحزم الخارجية
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+      };
+    }
+    
+    // حل مشكلة الحزم مثل mongoose
+    config.externals = [...(config.externals || []), 
+      ({ context, request }, callback) => {
+        if (/^mongoose$|^bcrypt$|^jsonwebtoken$|^cloudinary$/.test(request)) {
+          return callback(null, `commonjs ${request}`);
+        }
+        callback();
+      }
+    ];
+    
+    return config;
+  },
+  
+  // ⭐ إعدادات أخرى
+  poweredByHeader: false,
+  compress: true,
+  reactStrictMode: true,
+  swcMinify: true,
 };
 
 export default nextConfig;
