@@ -1,19 +1,20 @@
-// src/auth.ts - النسخة الكاملة المصححة
+// src/auth.ts
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
-import clientPromise from "@/lib/mongodb"; // تأكد من أن هذا الملف يصدر MongoClient
+import clientPromise from "@/lib/mongodb";
 import bcrypt from "bcryptjs";
+import type { Adapter } from "next-auth/adapters";
 
 // ✅ تأكد من وجود المتغيرات
 if (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET) {
-  throw new Error("AUTH_SECRET or NEXTAUTH_SECRET is not defined");
+  console.warn("⚠️ AUTH_SECRET or NEXTAUTH_SECRET is not defined");
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // ⭐ 1. Adapter مهم جداً
-  adapter: MongoDBAdapter(clientPromise),
+  // ⭐ 1. Adapter - استخدم type assertion لحل المشكلة
+  adapter: MongoDBAdapter(clientPromise) as Adapter,
   
   // ⭐ 2. الصفحات
   pages: {
@@ -23,10 +24,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     newUser: "/auth/register",
   },
   
-  // ⭐ 3. إعدادات الجلسة
+  // ⭐ 3. إعدادات الجلسة - مهم جداً
   session: {
-    strategy: "jwt", // تأكد من أن هذا موجود
+    strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 يوم
+    updateAge: 24 * 60 * 60, // تحديث كل 24 ساعة
   },
   
   // ⭐ 4. Providers
@@ -34,17 +36,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Credentials({
       name: "credentials",
       credentials: {
-        email: { label: "Email", type: "email", required: true },
-        password: { label: "Password", type: "password", required: true },
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         try {
           if (!credentials?.email || !credentials?.password) {
-            throw new Error("البريد الإلكتروني وكلمة المرور مطلوبان");
+            console.log("❌ Missing credentials");
+            return null;
           }
 
           // استيراد ديناميكي
-          const dbConnect = (await import("@/lib/mongoose")).default; // استخدم mongoose هنا
+          const dbConnect = (await import("@/lib/mongoose")).default;
           const User = (await import("@/models/User")).default;
 
           await dbConnect();
@@ -54,11 +57,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }).select("+password");
 
           if (!user) {
-            throw new Error("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+            console.log("❌ User not found");
+            return null;
           }
 
           if (!user.password) {
-            throw new Error("هذا الحساب مسجل بواسطة Google");
+            console.log("❌ No password - Google account");
+            return null;
           }
 
           const isValid = await bcrypt.compare(
@@ -67,83 +72,99 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           );
 
           if (!isValid) {
-            throw new Error("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+            console.log("❌ Invalid password");
+            return null;
           }
 
-          // ✅ أضف التحقق من isActive
           if (user.isActive === false) {
-            throw new Error("الحساب معطل. يرجى التواصل مع الإدارة");
+            console.log("❌ Account disabled");
+            return null;
           }
 
+          console.log("✅ User authenticated:", user.email);
+
+          // ✅ إرجاع بيانات المستخدم
           return {
             id: user._id.toString(),
             name: user.name,
             email: user.email,
-            image: user.image,
+            image: user.image || null,
             role: user.role || "user",
           };
-        } catch (error: any) {
-          console.error("Auth error:", error);
-          throw new Error(error.message || "حدث خطأ في تسجيل الدخول");
+        } catch (error) {
+          console.error("❌ Auth error:", error);
+          return null;
         }
       },
     }),
     Google({
       clientId: process.env.AUTH_GOOGLE_ID || process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.AUTH_GOOGLE_SECRET || process.env.GOOGLE_CLIENT_SECRET || "",
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   
-  // ⭐ 5. Callbacks مهمة جداً
+  // ⭐ 5. Callbacks - مهمة جداً
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
+      // عند تسجيل الدخول لأول مرة
       if (user) {
+        console.log("🔑 JWT callback - user:", user.email);
         token.id = user.id;
-        token.role = user.role;
+        token.role = user.role || "user";
         token.email = user.email;
         token.name = user.name;
-        token.image = user.image;
+        token.picture = user.image;
       }
+      
+      // عند تحديث الجلسة
+      if (trigger === "update" && session) {
+        token = { ...token, ...session };
+      }
+      
       return token;
     },
     
     async session({ session, token }) {
-      if (session.user) {
+      console.log("📦 Session callback - token:", token.email);
+      
+      if (session.user && token) {
         session.user.id = token.id as string;
-        session.user.role = token.role as string;
+        session.user.role = (token.role as string) || "user";
         session.user.email = token.email as string;
         session.user.name = token.name as string;
-        session.user.image = token.image as string;
+        session.user.image = token.picture as string;
       }
+      
       return session;
     },
     
     async redirect({ url, baseUrl }) {
-      // توجيه بعد تسجيل الدخول
+      // إذا كان URL نسبي
       if (url.startsWith("/")) {
         return `${baseUrl}${url}`;
-      } else if (new URL(url).origin === baseUrl) {
+      }
+      // إذا كان من نفس الموقع
+      if (url.startsWith(baseUrl)) {
         return url;
       }
+      // الافتراضي
       return baseUrl;
-    }
-  },
-  
-  // ⭐ 6. الإعدادات الأساسية
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
-  trustHost: true,
-  
-  // ⭐ 7. إعدادات الـ Cookies
-  cookies: {
-    sessionToken: {
-      name: `next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 30 * 24 * 60 * 60,
-      },
     },
   },
+  
+  // ⭐ 6. Events - للتتبع
+  events: {
+    async signIn({ user }) {
+      console.log("✅ Sign in event:", user.email);
+    },
+    async signOut() {
+      console.log("👋 Sign out event");
+    },
+  },
+  
+  // ⭐ 7. الإعدادات الأساسية
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  trustHost: true,
+  debug: process.env.NODE_ENV === "development",
 });

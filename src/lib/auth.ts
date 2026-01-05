@@ -1,7 +1,7 @@
 // src/lib/auth.ts
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
-import dbConnect from './mongodb';
+import dbConnect from './mongoose';
 import User from '../models/User';
 import bcrypt from 'bcryptjs';
 import type { NextAuthConfig } from 'next-auth';
